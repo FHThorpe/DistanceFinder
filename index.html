@@ -62,6 +62,7 @@
   }
   #err { display: none; font-size: 14px; color: #b3261e; text-align: center; margin-top: 8px; }
   .coords-label { font-size: 12px; color: #999; text-align: center; margin-top: -4px; }
+  .unit-btn.active { background: #d97757; color: #fff; }
 </style>
 </head>
 <body>
@@ -101,6 +102,10 @@
     <button type="button" class="secondary sign-toggle" data-target="lng" style="width:56px; margin-bottom:12px;">+/&minus;</button>
   </div>
   <button id="go">Calculate</button>
+  <div style="display:flex; gap:8px; margin-top:4px;">
+    <button type="button" class="secondary unit-btn" data-unit="imperial" id="unit-imperial" style="flex:1;">Miles / feet</button>
+    <button type="button" class="secondary unit-btn" data-unit="metric" id="unit-metric" style="flex:1;">Km / meters</button>
+  </div>
   <div id="err"></div>
 </div>
 
@@ -125,9 +130,39 @@
 
 <script>
 let here = null;
+let unit = 'imperial';
+let lastDistKm = null;
+let lastBearing = null;
+let lastDirName = null;
 
 function toRad(d) { return d * Math.PI / 180; }
 function toDeg(r) { return r * 180 / Math.PI; }
+
+function renderResult() {
+  if (lastDistKm === null) return;
+  let distText;
+  if (unit === 'imperial') {
+    const mi = lastDistKm * 0.621371;
+    const ft = mi * 5280;
+    distText = ft < 10000 ? Math.round(ft) + ' ft' : mi.toFixed(1) + ' mi';
+  } else {
+    distText = lastDistKm < 1 ? Math.round(lastDistKm * 1000) + ' m' : lastDistKm.toFixed(1) + ' km';
+  }
+  document.getElementById('dist').textContent = distText;
+  document.getElementById('dir').textContent = lastDirName + ' ' + Math.round(lastBearing) + '\u00b0';
+  document.getElementById('arrow').style.transform = 'rotate(' + Math.round(lastBearing) + 'deg)';
+  document.getElementById('result').style.display = 'block';
+}
+
+document.querySelectorAll('.unit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    unit = btn.dataset.unit;
+    document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderResult();
+  });
+});
+document.getElementById('unit-imperial').classList.add('active');
 
 function getLocation() {
   const status = document.getElementById('loc-status');
@@ -209,22 +244,19 @@ document.getElementById('go').addEventListener('click', () => {
   const dLng = toRad(lng2 - lng1);
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  const distKm = R * c;
-  const distMi = distKm * 0.621371;
+  lastDistKm = R * c;
 
   const y = Math.sin(dLng) * Math.cos(toRad(lat2));
   const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-  let bearing = (toDeg(Math.atan2(y, x)) + 360) % 360;
+  lastBearing = (toDeg(Math.atan2(y, x)) + 360) % 360;
 
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  const dirName = dirs[Math.round(bearing / 22.5) % 16];
+  lastDirName = dirs[Math.round(lastBearing / 22.5) % 16];
 
-  document.getElementById('dist').textContent = distKm.toFixed(1) + ' km';
-  document.getElementById('dir').textContent = dirName + ' ' + Math.round(bearing) + '°';
-  document.getElementById('arrow').style.transform = 'rotate(' + Math.round(bearing) + 'deg)';
-  result.style.display = 'block';
+  renderResult();
 });
 </script>
 
 </body>
 </html>
+
