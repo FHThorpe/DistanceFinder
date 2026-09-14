@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Distance & Direction Finder</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f4f3ee;
+    color: #222;
+    margin: 0;
+    padding: 20px 16px 60px;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 14px; margin: 0 0 20px; }
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  label { display:block; font-size: 13px; color: #666; margin-bottom: 4px; }
+  input[type="text"] {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    margin-bottom: 12px;
+  }
+  button {
+    width: 100%;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    background: #d97757;
+    color: white;
+    margin-bottom: 8px;
+  }
+  button.secondary {
+    background: #fff;
+    color: #d97757;
+    border: 1px solid #d97757;
+  }
+  #loc-status { font-size: 13px; color: #888; margin-bottom: 8px; text-align: center; }
+  #result { display: none; text-align: center; }
+  #result .row { display: flex; justify-content: space-around; margin-bottom: 16px; }
+  #result .label { font-size: 13px; color: #666; margin: 0 0 4px; }
+  #result .value { font-size: 26px; font-weight: 700; margin: 0; }
+  #arrow-wrap { display: flex; justify-content: center; margin: 12px 0; }
+  #arrow {
+    width: 70px; height: 70px;
+    transition: transform 0.3s ease;
+  }
+  #err { display: none; font-size: 14px; color: #b3261e; text-align: center; margin-top: 8px; }
+  .coords-label { font-size: 12px; color: #999; text-align: center; margin-top: -4px; }
+</style>
+</head>
+<body>
+
+<h1>Distance & direction finder</h1>
+<p class="sub">Enter coordinates to get the distance and compass bearing from where you are right now.</p>
+
+<div class="card">
+  <div id="loc-status">Getting your location…</div>
+  <div class="coords-label" id="here-coords"></div>
+  <button class="secondary" id="refresh-loc" style="margin-top:12px;">Refresh my location</button>
+  <button class="secondary" id="toggle-manual" style="margin-top:8px;">Enter my location manually</button>
+  <div id="manual-entry" style="display:none; margin-top:12px;">
+    <label for="my-lat">Your latitude</label>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="my-lat" placeholder="e.g. 40.7128" inputmode="decimal" style="flex:1;">
+      <button type="button" class="secondary sign-toggle" data-target="my-lat" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+    </div>
+    <label for="my-lng">Your longitude</label>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="my-lng" placeholder="e.g. -74.0060" inputmode="decimal" style="flex:1;">
+      <button type="button" class="secondary sign-toggle" data-target="my-lng" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+    </div>
+    <button id="use-manual">Use these coordinates</button>
+  </div>
+</div>
+
+<div class="card">
+  <label for="lat">Destination latitude</label>
+  <div style="display:flex; gap:8px;">
+    <input type="text" id="lat" placeholder="e.g. 40.7128" inputmode="decimal" style="flex:1;">
+    <button type="button" class="secondary sign-toggle" data-target="lat" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+  </div>
+  <label for="lng">Destination longitude</label>
+  <div style="display:flex; gap:8px;">
+    <input type="text" id="lng" placeholder="e.g. -74.0060" inputmode="decimal" style="flex:1;">
+    <button type="button" class="secondary sign-toggle" data-target="lng" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+  </div>
+  <button id="go">Calculate</button>
+  <div id="err"></div>
+</div>
+
+<div class="card" id="result">
+  <div class="row">
+    <div>
+      <p class="label">Distance</p>
+      <p class="value" id="dist"></p>
+    </div>
+    <div>
+      <p class="label">Direction</p>
+      <p class="value" id="dir"></p>
+    </div>
+  </div>
+  <div id="arrow-wrap">
+    <svg id="arrow" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5"></line>
+      <polyline points="5 12 12 5 19 12"></polyline>
+    </svg>
+  </div>
+</div>
+
+<script>
+let here = null;
+
+function toRad(d) { return d * Math.PI / 180; }
+function toDeg(r) { return r * 180 / Math.PI; }
+
+function getLocation() {
+  const status = document.getElementById('loc-status');
+  const coordsLabel = document.getElementById('here-coords');
+  status.textContent = 'Getting your location…';
+  if (!navigator.geolocation) {
+    status.textContent = 'Geolocation not supported on this browser.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      here = { lat: p.coords.latitude, lng: p.coords.longitude };
+      status.textContent = 'Location found';
+      coordsLabel.textContent = here.lat.toFixed(5) + ', ' + here.lng.toFixed(5);
+    },
+    e => {
+      status.textContent = 'Location unavailable — check that location access is allowed for this page, then refresh.';
+      coordsLabel.textContent = '';
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+document.querySelectorAll('.sign-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    const val = input.value.trim();
+    if (val === '') return;
+    input.value = val.startsWith('-') ? val.slice(1) : '-' + val;
+  });
+});
+
+getLocation();
+document.getElementById('refresh-loc').addEventListener('click', getLocation);
+
+document.getElementById('toggle-manual').addEventListener('click', () => {
+  const panel = document.getElementById('manual-entry');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('use-manual').addEventListener('click', () => {
+  const status = document.getElementById('loc-status');
+  const coordsLabel = document.getElementById('here-coords');
+  const mLat = parseFloat(document.getElementById('my-lat').value);
+  const mLng = parseFloat(document.getElementById('my-lng').value);
+  if (isNaN(mLat) || isNaN(mLng) || mLat < -90 || mLat > 90 || mLng < -180 || mLng > 180) {
+    status.textContent = 'Enter valid coordinates for your own location.';
+    coordsLabel.textContent = '';
+    return;
+  }
+  here = { lat: mLat, lng: mLng };
+  status.textContent = 'Using manually entered location';
+  coordsLabel.textContent = here.lat.toFixed(5) + ', ' + here.lng.toFixed(5);
+});
+
+document.getElementById('go').addEventListener('click', () => {
+  const err = document.getElementById('err');
+  const result = document.getElementById('result');
+  err.style.display = 'none';
+  result.style.display = 'none';
+
+  const lat2 = parseFloat(document.getElementById('lat').value);
+  const lng2 = parseFloat(document.getElementById('lng').value);
+
+  if (isNaN(lat2) || isNaN(lng2) || lat2 < -90 || lat2 > 90 || lng2 < -180 || lng2 > 180) {
+    err.textContent = 'Enter valid coordinates (latitude -90 to 90, longitude -180 to 180).';
+    err.style.display = 'block';
+    return;
+  }
+  if (!here) {
+    err.textContent = 'Still waiting on your location. Allow location access, refresh, and try again.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const R = 6371;
+  const lat1 = here.lat, lng1 = here.lng;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distKm = R * c;
+  const distMi = distKm * 0.621371;
+
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  let bearing = (toDeg(Math.atan2(y, x)) + 360) % 360;
+
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  const dirName = dirs[Math.round(bearing / 22.5) % 16];
+
+  document.getElementById('dist').textContent = distKm.toFixed(1) + ' km';
+  document.getElementById('dir').textContent = dirName + ' ' + Math.round(bearing) + '°';
+  document.getElementById('arrow').style.transform = 'rotate(' + Math.round(bearing) + 'deg)';
+  result.style.display = 'block';
+});
+</script>
+
+</body>
+</html>
