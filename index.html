@@ -76,18 +76,30 @@
   <button class="secondary" id="toggle-manual" style="margin-top:8px;">Enter my location manually</button>
   <div id="manual-entry" style="display:none; margin-top:12px;">
     <label for="my-lat">Your latitude</label>
-    <input type="text" id="my-lat" placeholder="e.g. 40.7128" inputmode="decimal">
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="my-lat" placeholder="e.g. 40.7128" inputmode="decimal" style="flex:1;">
+      <button type="button" class="secondary sign-toggle" data-target="my-lat" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+    </div>
     <label for="my-lng">Your longitude</label>
-    <input type="text" id="my-lng" placeholder="e.g. -74.0060" inputmode="decimal">
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="my-lng" placeholder="e.g. -74.0060" inputmode="decimal" style="flex:1;">
+      <button type="button" class="secondary sign-toggle" data-target="my-lng" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+    </div>
     <button id="use-manual">Use these coordinates</button>
   </div>
 </div>
 
 <div class="card">
   <label for="lat">Destination latitude</label>
-  <input type="text" id="lat" placeholder="e.g. 40.7128" inputmode="decimal">
+  <div style="display:flex; gap:8px;">
+    <input type="text" id="lat" placeholder="e.g. 40.7128" inputmode="decimal" style="flex:1;">
+    <button type="button" class="secondary sign-toggle" data-target="lat" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+  </div>
   <label for="lng">Destination longitude</label>
-  <input type="text" id="lng" placeholder="e.g. -74.0060" inputmode="decimal">
+  <div style="display:flex; gap:8px;">
+    <input type="text" id="lng" placeholder="e.g. -74.0060" inputmode="decimal" style="flex:1;">
+    <button type="button" class="secondary sign-toggle" data-target="lng" style="width:56px; margin-bottom:12px;">+/&minus;</button>
+  </div>
   <button id="go">Calculate</button>
   <div id="err"></div>
 </div>
@@ -138,6 +150,15 @@ function getLocation() {
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
+
+document.querySelectorAll('.sign-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    const val = input.value.trim();
+    if (val === '') return;
+    input.value = val.startsWith('-') ? val.slice(1) : '-' + val;
+  });
+});
 
 getLocation();
 document.getElementById('refresh-loc').addEventListener('click', getLocation);
