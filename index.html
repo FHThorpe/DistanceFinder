@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Distance Finder">
+<link rel="manifest" href="manifest.json">
 <title>Distance & Direction Finder</title>
 <style>
   * { box-sizing: border-box; }
@@ -135,6 +138,19 @@ let lastDistKm = null;
 let lastBearing = null;
 let lastDirName = null;
 
+// Restore saved destination coordinates
+const savedLat = localStorage.getItem('dest-lat');
+const savedLng = localStorage.getItem('dest-lng');
+if (savedLat) document.getElementById('lat').value = savedLat;
+if (savedLng) document.getElementById('lng').value = savedLng;
+document.getElementById('lat').addEventListener('input', e => localStorage.setItem('dest-lat', e.target.value));
+document.getElementById('lng').addEventListener('input', e => localStorage.setItem('dest-lng', e.target.value));
+
+// Register service worker for offline use
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 function toRad(d) { return d * Math.PI / 180; }
 function toDeg(r) { return r * 180 / Math.PI; }
 
@@ -259,4 +275,3 @@ document.getElementById('go').addEventListener('click', () => {
 
 </body>
 </html>
-
