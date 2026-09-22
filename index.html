@@ -44,14 +44,14 @@
     padding: 14px;
     border-radius: 10px;
     border: none;
-    background: #d97757;
+    background: #2c5f2d;
     color: white;
     margin-bottom: 8px;
   }
   button.secondary {
     background: #fff;
-    color: #d97757;
-    border: 1px solid #d97757;
+    color: #2c5f2d;
+    border: 1px solid #2c5f2d;
   }
   #loc-status { font-size: 13px; color: #888; margin-bottom: 8px; text-align: center; }
   #result { display: none; text-align: center; }
@@ -65,7 +65,21 @@
   }
   #err { display: none; font-size: 14px; color: #b3261e; text-align: center; margin-top: 8px; }
   .coords-label { font-size: 12px; color: #999; text-align: center; margin-top: -4px; }
-  .unit-btn.active { background: #d97757; color: #fff; }
+  .unit-btn.active { background: #2c5f2d; color: #fff; }
+  .loc-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .loc-row:last-child { border-bottom: none; }
+  .loc-coords { flex: 1.1; font-size: 12px; color: #666; }
+  .loc-name-input { flex: 1; margin: 0 !important; padding: 8px !important; font-size: 14px !important; }
+  .loc-del { width: 36px !important; margin: 0 !important; padding: 8px 0 !important; }
+  select {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    margin-bottom: 12px;
+    background: #fff;
+  }
 </style>
 </head>
 <body>
@@ -78,6 +92,8 @@
   <div class="coords-label" id="here-coords"></div>
   <button class="secondary" id="refresh-loc" style="margin-top:12px;">Refresh my location</button>
   <button class="secondary" id="toggle-manual" style="margin-top:8px;">Enter my location manually</button>
+  <button class="secondary" id="enable-compass" style="margin-top:8px;">Enable compass</button>
+  <div id="compass-status" style="font-size:13px; color:#888; text-align:center; margin-top:4px;"></div>
   <div id="manual-entry" style="display:none; margin-top:12px;">
     <label for="my-lat">Your latitude</label>
     <div style="display:flex; gap:8px;">
@@ -94,6 +110,10 @@
 </div>
 
 <div class="card">
+  <label for="location-select">Load a saved location</label>
+  <select id="location-select">
+    <option value="">— Select —</option>
+  </select>
   <label for="lat">Destination latitude</label>
   <div style="display:flex; gap:8px;">
     <input type="text" id="lat" placeholder="e.g. 40.7128" inputmode="decimal" style="flex:1;">
@@ -124,11 +144,16 @@
     </div>
   </div>
   <div id="arrow-wrap">
-    <svg id="arrow" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg id="arrow" viewBox="0 0 24 24" fill="none" stroke="#2c5f2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="12" y1="19" x2="12" y2="5"></line>
       <polyline points="5 12 12 5 19 12"></polyline>
     </svg>
   </div>
+</div>
+
+<div class="card">
+  <label style="margin-bottom:8px;">Searched coordinates</label>
+  <div id="location-table"></div>
 </div>
 
 <script>
@@ -137,12 +162,94 @@ let unit = 'imperial';
 let lastDistKm = null;
 let lastBearing = null;
 let lastDirName = null;
+let deviceHeading = null;
+let locations = [];
+try { locations = JSON.parse(localStorage.getItem('saved-locations') || '[]'); } catch (e) { locations = []; }
 
-// Restore saved destination coordinates
+function saveLocationsToStorage() {
+  localStorage.setItem('saved-locations', JSON.stringify(locations));
+}
+
+function addLocationEntry(lat, lng) {
+  const existing = locations.find(l => l.lat === lat && l.lng === lng);
+  if (existing) {
+    existing.timestamp = Date.now();
+  } else {
+    locations.unshift({ id: Date.now() + '-' + Math.random().toString(36).slice(2), lat, lng, name: '', timestamp: Date.now() });
+  }
+  locations.sort((a, b) => b.timestamp - a.timestamp);
+  locations = locations.slice(0, 25);
+  saveLocationsToStorage();
+  renderLocationTable();
+  renderLocationSelect();
+}
+
+function renderLocationTable() {
+  const container = document.getElementById('location-table');
+  if (locations.length === 0) {
+    container.innerHTML = '<p style="font-size:13px; color:#999; text-align:center; margin:4px 0;">No searched coordinates yet — hit Calculate to log one here.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  locations.forEach(loc => {
+    const row = document.createElement('div');
+    row.className = 'loc-row';
+    const coordSpan = document.createElement('div');
+    coordSpan.className = 'loc-coords';
+    coordSpan.textContent = loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5);
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'loc-name-input';
+    nameInput.placeholder = 'Name it';
+    nameInput.value = loc.name;
+    nameInput.addEventListener('change', () => {
+      loc.name = nameInput.value.trim();
+      saveLocationsToStorage();
+      renderLocationSelect();
+    });
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'secondary loc-del';
+    delBtn.textContent = '\u2715';
+    delBtn.addEventListener('click', () => {
+      locations = locations.filter(l => l.id !== loc.id);
+      saveLocationsToStorage();
+      renderLocationTable();
+      renderLocationSelect();
+    });
+    row.appendChild(coordSpan);
+    row.appendChild(nameInput);
+    row.appendChild(delBtn);
+    container.appendChild(row);
+  });
+}
+
+function renderLocationSelect() {
+  const select = document.getElementById('location-select');
+  const named = locations.filter(l => l.name);
+  const current = select.value;
+  select.innerHTML = '<option value="">— Select —</option>' +
+    named.map(l => '<option value="' + l.id + '">' + l.name.replace(/</g, '&lt;') + '</option>').join('');
+  if (named.some(l => l.id === current)) select.value = current;
+}
+
+document.getElementById('location-select').addEventListener('change', e => {
+  const loc = locations.find(l => l.id === e.target.value);
+  if (!loc) return;
+  document.getElementById('lat').value = loc.lat;
+  document.getElementById('lng').value = loc.lng;
+  localStorage.setItem('dest-lat', loc.lat);
+  localStorage.setItem('dest-lng', loc.lng);
+});
+
+renderLocationTable();
+renderLocationSelect();
+
+// Restore saved destination coordinates (fall back to a default if none saved)
 const savedLat = localStorage.getItem('dest-lat');
 const savedLng = localStorage.getItem('dest-lng');
-if (savedLat) document.getElementById('lat').value = savedLat;
-if (savedLng) document.getElementById('lng').value = savedLng;
+document.getElementById('lat').value = savedLat || '37.818836';
+document.getElementById('lng').value = savedLng || '-83.579036';
 document.getElementById('lat').addEventListener('input', e => localStorage.setItem('dest-lat', e.target.value));
 document.getElementById('lng').addEventListener('input', e => localStorage.setItem('dest-lng', e.target.value));
 
@@ -153,6 +260,15 @@ if ('serviceWorker' in navigator) {
 
 function toRad(d) { return d * Math.PI / 180; }
 function toDeg(r) { return r * 180 / Math.PI; }
+
+function updateArrowRotation() {
+  if (lastBearing === null) return;
+  let rotation = lastBearing;
+  if (deviceHeading !== null) {
+    rotation = (lastBearing - deviceHeading + 360) % 360;
+  }
+  document.getElementById('arrow').style.transform = 'rotate(' + rotation + 'deg)';
+}
 
 function renderResult() {
   if (lastDistKm === null) return;
@@ -166,9 +282,45 @@ function renderResult() {
   }
   document.getElementById('dist').textContent = distText;
   document.getElementById('dir').textContent = lastDirName + ' ' + Math.round(lastBearing) + '\u00b0';
-  document.getElementById('arrow').style.transform = 'rotate(' + Math.round(lastBearing) + 'deg)';
+  updateArrowRotation();
   document.getElementById('result').style.display = 'block';
 }
+
+function handleOrientation(event) {
+  let heading;
+  if (typeof event.webkitCompassHeading === 'number') {
+    heading = event.webkitCompassHeading; // iOS: already true compass heading
+  } else if (event.alpha !== null && event.alpha !== undefined) {
+    heading = (360 - event.alpha) % 360; // Android: alpha increases counter-clockwise from north
+  } else {
+    return;
+  }
+  deviceHeading = heading;
+  updateArrowRotation();
+}
+
+document.getElementById('enable-compass').addEventListener('click', () => {
+  const status = document.getElementById('compass-status');
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+: must be requested directly from a user gesture
+    DeviceOrientationEvent.requestPermission().then(state => {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientation', handleOrientation);
+        status.textContent = 'Compass enabled — arrow points the real direction';
+      } else {
+        status.textContent = 'Compass permission denied';
+      }
+    }).catch(() => { status.textContent = 'Compass not available on this device'; });
+  } else if ('ondeviceorientationabsolute' in window) {
+    window.addEventListener('deviceorientationabsolute', handleOrientation);
+    status.textContent = 'Compass enabled — arrow points the real direction';
+  } else if ('ondeviceorientation' in window) {
+    window.addEventListener('deviceorientation', handleOrientation);
+    status.textContent = 'Compass enabled (heading may drift on this device)';
+  } else {
+    status.textContent = 'Compass not supported on this device';
+  }
+});
 
 document.querySelectorAll('.unit-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -269,6 +421,7 @@ document.getElementById('go').addEventListener('click', () => {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   lastDirName = dirs[Math.round(lastBearing / 22.5) % 16];
 
+  addLocationEntry(lat2, lng2);
   renderResult();
 });
 </script>
