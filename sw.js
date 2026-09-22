@@ -1,4 +1,4 @@
-const CACHE_NAME = 'distance-finder-v1';
+const CACHE_NAME = 'distance-finder-v2';
 const FILES_TO_CACHE = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', event => {
